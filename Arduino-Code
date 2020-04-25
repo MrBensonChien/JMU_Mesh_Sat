@@ -1,0 +1,36 @@
+#include <SoftwareSerial.h>
+SoftwareSerial xbee(0,1);
+
+int ledPin = 13;
+int photocellPin = A1;
+int photocellReading;
+
+
+void setup(){
+xbee.begin(9600);
+Serial.begin(9600);
+pinMode(ledPin, OUTPUT);
+
+pinMode(A0, OUTPUT);
+digitalWrite(A0, HIGH);
+}
+
+void loop(){
+photocellReading = analogRead(A1);
+digitalWrite(ledPin, HIGH);
+delay(1000);
+digitalWrite(ledPin, LOW);
+
+int bytesSent = Serial.write("Greetings from MeshSat #1\n");
+
+
+
+
+
+//Doesnt work right now
+if (xbee.available()) {
+byte temp= xbee.read();
+Serial.print(temp);
+}
+delay(500);
+}
