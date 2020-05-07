@@ -1,0 +1,110 @@
+
+#include <XBee.h>// Instantiate Xbee Variables
+XBee xbee = XBee();
+
+XBeeResponse response = XBeeResponse();// Set Pin Variables
+// LED 13 Communications
+int statusLed = 13;
+int errorLed  = 13;
+int dataLed   = 13;const int led_red   =  7;
+const int led_blue  =  8;
+const int led_green =  9;
+const int ldrPin    =  A0;
+const int interruptPin = 2;
+const int interruptPin_clear = 3;byte packet_red[]   =  { 0x72 };
+byte packet_blue[]  =  { 0x62 };
+byte packet_green[] =  { 0x67 };
+//byte packet_blue[]  = { 0x7E, 0x00, 0x0F, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0x72, 0x91 };
+//byte packet_blue[]  = { 0x7E, 0x00, 0x0F, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0x62, 0x91 };
+//byte packet_green[] = { 0x7E, 0x00, 0x0F, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0x67, 0x91 };int toggle = true;// SH + SL Address of receiving XBee
+XBeeAddress64 addr64 = XBeeAddress64(0x00000000, 0x0000ffff);
+ZBTxRequest zbTx_red  = ZBTxRequest(addr64, packet_red, sizeof(packet_red));
+ZBTxRequest zbTx_blue = ZBTxRequest(addr64, packet_blue, sizeof(packet_blue));
+ZBTxRequest zbTx_green = ZBTxRequest(addr64, packet_green, sizeof(packet_green));
+ZBTxStatusResponse txStatus = ZBTxStatusResponse();// Create Reusable response objects for responses we expect to handle
+ZBRxResponse rx = ZBRxResponse();
+ModemStatusResponse msr = ModemStatusResponse();void setup() {
+  Serial.begin(9600);  // Init Communication and Data Leds
+  pinMode(statusLed, OUTPUT);
+  pinMode(errorLed, OUTPUT);
+  pinMode(dataLed,  OUTPUT);  // Init Blue & Green Pins as Output
+  pinMode(led_red,  OUTPUT);
+  pinMode(led_blue, OUTPUT);
+  pinMode(led_green, OUTPUT);
+  pinMode(interruptPin, INPUT);
+  // Init Photoresister as Input
+  pinMode(ldrPin, INPUT_PULLUP);  digitalWrite(interruptPin, HIGH);  // Attach Interrupt Service Routine to Falling Edge of Pin 2
+  attachInterrupt(digitalPinToInterrupt(interruptPin) , isr_signal, FALLING); digitalWrite(led_green, HIGH); Serial.begin(9600);
+ xbee.begin(Serial); flashLed(statusLed, 3, 50);}void loop() {  // read value of photoresistor  int ldrStatus = analogRead(ldrPin);
+  Serial.println(ldrStatus);
+//  Serial.println(digitalRead(interruptPin));
+  if(ldrStatus >= 750) {
+    digitalWrite(interruptPin, LOW);
+  }  rx_packet();}// Functions
+void rx_packet() {  xbee.readPacket();  if (xbee.getResponse().isAvailable()) {
+      // got something      if (xbee.getResponse().getApiId() == ZB_RX_RESPONSE) {
+        // got a zb rx packet        // now fill our zb rx class
+        xbee.getResponse().getZBRxResponse(rx);        if (rx.getOption() == ZB_PACKET_ACKNOWLEDGED) {
+            // the sender got an ACK
+            flashLed(statusLed, 10, 10);
+        } else {
+            // we got it (obviously) but sender didn't get an ACK
+            flashLed(errorLed, 2, 20);
+        }
+        // set dataLed PWM to value of the first byte in the data
+        char c = rx.getData(0);
+        switch (c) {
+          case 'r':
+            digitalWrite(led_red, HIGH);
+            digitalWrite(led_blue, LOW);
+            digitalWrite(led_green, LOW);
+            break;
+          case 'b':
+            digitalWrite(led_red, LOW);
+            digitalWrite(led_blue, HIGH);
+            digitalWrite(led_green, LOW);
+            break;
+          case 'g':
+            digitalWrite(led_red, LOW);
+            digitalWrite(led_blue, LOW);
+            digitalWrite(led_green, HIGH);
+            break;
+          default:
+            digitalWrite(led_red, LOW);
+            digitalWrite(led_blue, LOW);
+            digitalWrite(led_green, HIGH);
+            break;
+          }      } else if (xbee.getResponse().getApiId() == MODEM_STATUS_RESPONSE) {
+        xbee.getResponse().getModemStatusResponse(msr);
+        // the local XBee sends this response on certain events, like association/dissociation        if (msr.getStatus() == ASSOCIATED) {
+          // yay this is great.  flash led
+          flashLed(statusLed, 10, 10);
+        } else if (msr.getStatus() == DISASSOCIATED) {
+          // this is awful.. flash led to show our discontent
+          flashLed(errorLed, 10, 10);
+        } else {
+          // another status
+          flashLed(statusLed, 5, 10);
+        }
+      } else {
+        // not something we were expecting
+        flashLed(errorLed, 1, 25);
+      }
+    } else if (xbee.getResponse().isError()) {
+      //nss.print("Error reading packet.  Error code: ");
+      //nss.println(xbee.getResponse().getErrorCode());
+    }
+}// Interrupt Service Routine
+void isr_signal() {
+   xbee.send(zbTx_green);
+}void isr_signal_clear() {
+  toggle = false;
+}// Function for status and communications pin 13 led
+void flashLed(int pin, int times, int wait) {    for (int i = 0; i < times; i++) {
+      digitalWrite(pin, HIGH);
+      delay(wait);
+      digitalWrite(pin, LOW);      if (i + 1 < times) {
+        delay(wait);
+      }
+    }
+}
